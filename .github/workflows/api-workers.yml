@@ -1,0 +1,27 @@
+name: Deploy API Workers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api-workers/**'
+      - 'packages/core/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck --workspace apps/api-workers
+      - name: Deploy Cloudflare Worker
+        run: npx wrangler deploy
+        working-directory: apps/api-workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

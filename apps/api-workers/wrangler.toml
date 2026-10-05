@@ -1,0 +1,52 @@
+name = "kura-api-core"
+main = "src/index.ts"
+compatibility_date = "2024-03-20"
+
+# Variables de entorno planas. Las credenciales de AWS SES van en .dev.vars o Secrets.
+[vars]
+ENVIRONMENT = "production"
+AWS_REGION = "us-east-1"
+# Limitar correos de prueba a 50
+MAX_TRIAL_SENDS = 50
+
+# ---------------------------------------------------------------------------
+# Cola de envíos (Motor Asíncrono: API -> Worker Consumidor -> AWS SES)
+# ---------------------------------------------------------------------------
+
+# Configuración del Productor: hacia dónde empuja mensajes la API
+[[queues.producers]]
+queue = "kura-sending-queue"
+binding = "SENDING_QUEUE"
+
+# Configuración del Consumidor: cómo el Worker procesa la cola
+[[queues.consumers]]
+queue = "kura-sending-queue"
+max_batch_size = 10           # Procesa de 10 en 10 para BulkTemplatedEmail
+max_batch_timeout = 5         # Espera máximo 5 segundos para llenar el lote
+max_retries = 3               # Tolerancia a fallos de red con AWS SES
+dead_letter_queue = "kura-dlq"
+
+# ---------------------------------------------------------------------------
+# Cola de telemetría (Edge Tracker -> Consumer -> campaign_events)
+# ---------------------------------------------------------------------------
+
+[[queues.producers]]
+queue = "kura-tracking-queue"
+binding = "TRACKING_QUEUE"
+
+[[queues.consumers]]
+queue = "kura-tracking-queue"
+max_batch_size = 100          # INSERT masivo de eventos analíticos
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "kura-tracking-dlq"
+
+# ---------------------------------------------------------------------------
+# Base de datos (Hyperdrive -> Supabase PostgreSQL)
+# ---------------------------------------------------------------------------
+# Deshabilitado para desarrollo local: evita requerir un connection string
+# de PostgreSQL/Supabase. Reactivar en producción tras crear el Hyperdrive.
+#
+# [[hyperdrive]]
+# binding = "DB_POOL"
+# id = "kura-supabase-pool-id"
