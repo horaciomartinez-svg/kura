@@ -2,6 +2,17 @@
 AWS_ACCESS_KEY_ID=your-access-key-id
 AWS_SECRET_ACCESS_KEY=your-secret-access-key
 
+# Supabase Auth: URL del proyecto. El Worker verifica el JWT contra el JWKS
+# público en {SUPABASE_URL}/auth/v1/.well-known/jwks.json (no requiere API key).
+SUPABASE_URL=https://your-project.supabase.co
+
+# Fallback HS256 solo para proyectos legacy con JWT simétrico (opcional).
+# SUPABASE_JWT_SECRET=your-legacy-jwt-secret
+
+# Solo si en el futuro se usan operaciones administrativas vía REST API (opcional).
+# Formato nuevo: sb_secret_...
+# SUPABASE_SERVICE_ROLE_KEY=sb_secret_your-service-role-key
+
 # Conexión PostgreSQL (Supabase) para desarrollo local con wrangler dev.
 # En producción se usa el binding Hyperdrive DB_POOL (ver wrangler.toml).
 DATABASE_URL=postgres://user:password@host:5432/postgres

@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { CampaignCompileRequest, CampaignSaveRequest } from '@kura/core';
 import { getDb } from '../db/client';
 import { campaigns } from '../db/schema';
@@ -27,10 +27,14 @@ async function readJson<T>(request: Request): Promise<T | null> {
  * PATCH /api/campaigns/:id/autosave
  * Guarda solo el AST de Easy-Email (design_json) + updated_at, sin compilar (§9.4).
  */
-export async function handleAutosave(request: Request, env: Env): Promise<Response> {
+export async function handleAutosave(
+  request: Request,
+  env: Env,
+  userId: string
+): Promise<Response> {
   const campaignId = new URL(request.url).pathname.split('/')[3];
 
-  // TODO(auth): extraer user_id del JWT verificado y filtrar por user_id.
+  // El user_id proviene del JWT verificado en el middleware (§12.2).
   const body = await readJson<CampaignSaveRequest>(request);
   if (!body || typeof body.design_json === 'undefined') {
     return error('INVALID_PAYLOAD', 'Falta el campo design_json (AST de Easy-Email).', 400);
@@ -40,7 +44,7 @@ export async function handleAutosave(request: Request, env: Env): Promise<Respon
   const updated = await db
     .update(campaigns)
     .set({ designJson: body.design_json, updatedAt: new Date() })
-    .where(eq(campaigns.id, campaignId))
+    .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)))
     .returning({ id: campaigns.id });
 
   if (updated.length === 0) {
@@ -54,10 +58,14 @@ export async function handleAutosave(request: Request, env: Env): Promise<Respon
  * PUT /api/campaigns/:id/compile
  * Guarda el AST + el HTML ya compilado en el cliente (mjml-browser) (§9.4).
  */
-export async function handleCompile(request: Request, env: Env): Promise<Response> {
+export async function handleCompile(
+  request: Request,
+  env: Env,
+  userId: string
+): Promise<Response> {
   const campaignId = new URL(request.url).pathname.split('/')[3];
 
-  // TODO(auth): extraer user_id del JWT verificado y filtrar por user_id.
+  // El user_id proviene del JWT verificado en el middleware (§12.2).
   const body = await readJson<CampaignCompileRequest>(request);
   if (
     !body ||
@@ -75,7 +83,7 @@ export async function handleCompile(request: Request, env: Env): Promise<Respons
       htmlContent: body.html_content,
       updatedAt: new Date(),
     })
-    .where(eq(campaigns.id, campaignId))
+    .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)))
     .returning({ id: campaigns.id });
 
   if (updated.length === 0) {
@@ -90,10 +98,14 @@ export async function handleCompile(request: Request, env: Env): Promise<Respons
  * @deprecated Ruta del builder propio previo a Easy-Email. Guarda el payload
  * recibido como design_json para no romper clientes antiguos.
  */
-export async function handleSaveDesign(request: Request, env: Env): Promise<Response> {
+export async function handleSaveDesign(
+  request: Request,
+  env: Env,
+  userId: string
+): Promise<Response> {
   const campaignId = new URL(request.url).pathname.split('/')[3];
 
-  // TODO(auth): extraer user_id del JWT verificado y filtrar por user_id.
+  // El user_id proviene del JWT verificado en el middleware (§12.2).
   const body = await readJson<Record<string, unknown>>(request);
   if (!body) {
     return error('INVALID_PAYLOAD', 'Cuerpo JSON inválido.', 400);
@@ -103,7 +115,7 @@ export async function handleSaveDesign(request: Request, env: Env): Promise<Resp
   const updated = await db
     .update(campaigns)
     .set({ designJson: body as never, updatedAt: new Date() })
-    .where(eq(campaigns.id, campaignId))
+    .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)))
     .returning({ id: campaigns.id });
 
   if (updated.length === 0) {

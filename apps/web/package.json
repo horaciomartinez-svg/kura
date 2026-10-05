@@ -12,6 +12,8 @@
   "dependencies": {
     "@hello-pangea/dnd": "^16.5.0",
     "@kura/core": "*",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.2",
     "lucide-react": "^0.363.0",
     "next": "^14.1.4",
     "react": "^18.2.0",

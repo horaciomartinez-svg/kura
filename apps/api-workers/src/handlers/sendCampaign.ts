@@ -23,21 +23,24 @@ function error(code: string, message: string, status: number): Response {
  * Productor: valida la campaña, el trial y el cumplimiento, y encola los
  * envíos en lotes de 500 contactos activos sin bloquear la respuesta (§10.1).
  */
-export async function handleSendCampaign(request: Request, env: Env): Promise<Response> {
+export async function handleSendCampaign(
+  request: Request,
+  env: Env,
+  userId: string
+): Promise<Response> {
   const url = new URL(request.url);
   const campaignId = url.pathname.split('/')[3];
 
-  // TODO(auth): extraer user_id del JWT verificado (Supabase JWKS) y filtrar
-  // todas las consultas por user_id para aislar el tenant. Mientras la auth no
-  // exista, el user_id se deriva de la propia campaña.
+  // El user_id proviene del JWT verificado en el middleware (§12.2); nunca del
+  // cuerpo del cliente. Todas las consultas filtran por user_id (tenant).
   const db = getDb(env);
 
   try {
-    // 1. Campaña existente y en estado borrador.
+    // 1. Campaña existente, del tenant y en estado borrador.
     const [campaign] = await db
       .select()
       .from(campaigns)
-      .where(eq(campaigns.id, campaignId))
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)))
       .limit(1);
 
     if (!campaign) {
@@ -49,7 +52,7 @@ export async function handleSendCampaign(request: Request, env: Env): Promise<Re
     }
 
     // 2. Usuario y límites del trial.
-    const [user] = await db.select().from(users).where(eq(users.id, campaign.userId)).limit(1);
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
     if (!user) {
       return error('USER_NOT_FOUND', 'El usuario de la campaña no existe.', 404);
@@ -96,7 +99,13 @@ export async function handleSendCampaign(request: Request, env: Env): Promise<Re
         })
         .from(contacts)
         .innerJoin(listMemberships, eq(listMemberships.contactId, contacts.id))
-        .where(and(eq(listMemberships.listId, listId), eq(contacts.status, 'active')))
+        .where(
+          and(
+            eq(listMemberships.listId, listId),
+            eq(contacts.userId, userId),
+            eq(contacts.status, 'active')
+          )
+        )
         .limit(DB_PAGE_SIZE)
         .offset(offset);
 

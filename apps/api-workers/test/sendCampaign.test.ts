@@ -103,7 +103,7 @@ describe('handleSendCampaign', () => {
     mockGetDb.mockReturnValue(createMockDb({}) as never);
     const { env } = createEnv();
 
-    const response = await handleSendCampaign(request(), env);
+    const response = await handleSendCampaign(request(), env, 'usr-1');
     const body = (await response.json()) as { error: { code: string } };
 
     expect(response.status).toBe(404);
@@ -119,7 +119,7 @@ describe('handleSendCampaign', () => {
     );
     const { env, sendBatch } = createEnv();
 
-    const response = await handleSendCampaign(request(), env);
+    const response = await handleSendCampaign(request(), env, 'usr-1');
     const body = (await response.json()) as { error: { code: string } };
 
     expect(response.status).toBe(402);
@@ -133,7 +133,7 @@ describe('handleSendCampaign', () => {
     );
     const { env, sendBatch } = createEnv();
 
-    const response = await handleSendCampaign(request(), env);
+    const response = await handleSendCampaign(request(), env, 'usr-1');
     const body = (await response.json()) as { error: { code: string } };
 
     expect(response.status).toBe(422);
@@ -154,7 +154,7 @@ describe('handleSendCampaign', () => {
     );
     const { env, sendBatch } = createEnv();
 
-    const response = await handleSendCampaign(request(), env);
+    const response = await handleSendCampaign(request(), env, 'usr-1');
     const body = (await response.json()) as { enqueued: number };
 
     expect(response.status).toBe(202);
