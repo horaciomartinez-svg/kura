@@ -1,2 +1,7 @@
+# Credenciales de AWS SES
 AWS_ACCESS_KEY_ID=your-access-key-id
 AWS_SECRET_ACCESS_KEY=your-secret-access-key
+
+# Conexión PostgreSQL (Supabase) para desarrollo local con wrangler dev.
+# En producción se usa el binding Hyperdrive DB_POOL (ver wrangler.toml).
+DATABASE_URL=postgres://user:password@host:5432/postgres

@@ -16,5 +16,5 @@
       "@kura/core": ["../../packages/core/index.ts"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "test/**/*.ts", "vitest.config.ts"]
 }

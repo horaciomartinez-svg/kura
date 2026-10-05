@@ -1,6 +1,6 @@
 import type { MessageBatch } from '@cloudflare/workers-types';
 import { handleSendCampaign } from './handlers/sendCampaign';
-import { handleSaveDesign } from './handlers/saveDesign';
+import { handleAutosave, handleCompile, handleSaveDesign } from './handlers/saveDesign';
 import { processEmailQueue } from './queues/emailConsumer';
 import { processTrackingQueue } from './queues/trackingConsumer';
 import tracker from './tracking';
@@ -9,7 +9,7 @@ import type { QueuePayload, TrackingPayload } from '@kura/core';
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
@@ -38,6 +38,17 @@ export default {
       return withCors(await handleSendCampaign(request, env));
     }
 
+    // Autosave del AST de Easy-Email (§9.4).
+    if (request.method === 'PATCH' && url.pathname.match(/^\/api\/campaigns\/[^/]+\/autosave$/)) {
+      return withCors(await handleAutosave(request, env));
+    }
+
+    // Guardado del AST + HTML compilado (§9.4).
+    if (request.method === 'PUT' && url.pathname.match(/^\/api\/campaigns\/[^/]+\/compile$/)) {
+      return withCors(await handleCompile(request, env));
+    }
+
+    // @deprecated Ruta del builder propio (pre-Easy-Email).
     if (request.method === 'PUT' && url.pathname.match(/^\/api\/campaigns\/[^/]+\/design$/)) {
       return withCors(await handleSaveDesign(request, env));
     }

@@ -1,8 +1,11 @@
 name = "kura-api-core"
 main = "src/index.ts"
 compatibility_date = "2024-03-20"
+# postgres.js (driver de Drizzle) requiere las APIs de Node.
+compatibility_flags = ["nodejs_compat"]
 
 # Variables de entorno planas. Las credenciales de AWS SES van en .dev.vars o Secrets.
+# La cadena PostgreSQL de desarrollo local se define en .dev.vars como DATABASE_URL.
 [vars]
 ENVIRONMENT = "production"
 AWS_REGION = "us-east-1"

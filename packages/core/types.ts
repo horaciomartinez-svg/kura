@@ -64,6 +64,24 @@ export interface CampaignBuilderState {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Editor Easy-Email (AST canónico + artefacto HTML compilado) §9.1 / §20     */
+/* -------------------------------------------------------------------------- */
+
+export interface EasyEmailAST {
+  type: 'page';
+  data: { value: Record<string, any> };
+  children: any[];
+}
+
+export interface CampaignSaveRequest {
+  design_json: EasyEmailAST;
+}
+
+export interface CampaignCompileRequest extends CampaignSaveRequest {
+  html_content: string; // HTML final compilado en el cliente (mjml-browser)
+}
+
+/* -------------------------------------------------------------------------- */
 /* Contrato de la cola asíncrona (Cloudflare Queues -> AWS SES)               */
 /* -------------------------------------------------------------------------- */
 

@@ -1,32 +1,37 @@
 import type { MessageBatch } from '@cloudflare/workers-types';
-import type { Env } from '../types/env';
 import type { TrackingPayload } from '@kura/core';
+import { getDb } from '../db/client';
+import { campaignEvents } from '../db/schema';
+import type { Env } from '../types/env';
 
 /**
- * Consumidor de telemetría: retira eventos de la cola en lotes y ejecuta
- * un INSERT masivo en campaign_events.
+ * Consumidor de telemetría: retira eventos de la cola en lotes y ejecuta un
+ * INSERT masivo parametrizado vía Drizzle (§11.3). No se interpola SQL con
+ * datos de la cola.
  */
-export async function processTrackingQueue(batch: MessageBatch<TrackingPayload>, env: Env): Promise<void> {
-  const values = batch.messages
-    .map(
-      (msg) => `(
-    '${msg.body.campaign_id}',
-    '${msg.body.contact_id}',
-    '${msg.body.event_type}',
-    '${msg.body.url_clicked || ''}',
-    ${msg.body.is_machine_open}
-  )`
-    )
-    .join(',');
+export async function processTrackingQueue(
+  batch: MessageBatch<TrackingPayload>,
+  env: Env
+): Promise<void> {
+  if (batch.messages.length === 0) {
+    batch.ackAll();
+    return;
+  }
 
-  const query = `
-    INSERT INTO campaign_events (campaign_id, contact_id, event_type, url_clicked, is_machine_open)
-    VALUES ${values}
-  `;
+  const db = getDb(env);
+
+  const rows = batch.messages.map((message) => ({
+    campaignId: message.body.campaign_id,
+    contactId: message.body.contact_id,
+    eventType: message.body.event_type,
+    urlClicked: message.body.url_clicked,
+    isMachineOpen: message.body.is_machine_open,
+  }));
 
   try {
-    // await db.execute(query);
-    console.log(`Eventos de tracking insertados: ${batch.messages.length}`);
+    await db.insert(campaignEvents).values(rows);
+    console.log(`Eventos de tracking insertados: ${rows.length}`);
+    // Confirmar a la cola solo tras el éxito del INSERT.
     batch.ackAll();
   } catch (error) {
     console.error('Error insertando eventos de tracking:', error);
