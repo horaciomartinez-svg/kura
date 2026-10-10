@@ -1,4 +1,6 @@
 import type { MessageBatch } from '@cloudflare/workers-types';
+import { handleGetAsset, handleUploadAsset } from './handlers/assets';
+import { handleGetCampaign } from './handlers/getCampaign';
 import { handleSendCampaign } from './handlers/sendCampaign';
 import { handleAutosave, handleCompile, handleSaveDesign } from './handlers/saveDesign';
 import { processEmailQueue } from './queues/emailConsumer';
@@ -52,6 +54,12 @@ export default {
       return withCors(await tracker.fetch(request, env, ctx));
     }
 
+    // Assets: servido público del binario desde R2 (solo dev; en producción lo
+    // hace el CDN, §12.5).
+    if (request.method === 'GET' && url.pathname.startsWith('/api/assets/')) {
+      return withCors(await handleGetAsset(request, env));
+    }
+
     // TODO(webhooks): verificar firma SNS/Stripe antes de procesar (§11.2, §12.3).
     if (url.pathname.startsWith('/webhooks/')) {
       return withCors(new Response('Not Found', { status: 404 }));
@@ -62,6 +70,16 @@ export default {
       const auth = await authenticateRequest(request, env);
       if (!auth.ok) return withCors(auth.response);
       const userId = auth.user.id;
+
+      // Subida de imágenes del editor a R2 (§12.5).
+      if (request.method === 'POST' && url.pathname === '/api/assets') {
+        return withCors(await handleUploadAsset(request, env, userId));
+      }
+
+      // Detalle de campaña: carga del AST en el editor (§9.4).
+      if (request.method === 'GET' && url.pathname.match(/^\/api\/campaigns\/[^/]+$/)) {
+        return withCors(await handleGetCampaign(request, env, userId));
+      }
 
       if (request.method === 'POST' && url.pathname.match(/^\/api\/campaigns\/[^/]+\/send$/)) {
         return withCors(await handleSendCampaign(request, env, userId));

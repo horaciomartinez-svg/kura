@@ -10,11 +10,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hello-pangea/dnd": "^16.5.0",
+    "@arco-design/web-react": "^2.66.16",
     "@kura/core": "*",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.2",
+    "easy-email-core": "^4.17.1",
+    "easy-email-editor": "^4.17.1",
+    "easy-email-extensions": "^4.17.1",
     "lucide-react": "^0.363.0",
+    "mjml-browser": "^4.18.0",
     "next": "^14.1.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

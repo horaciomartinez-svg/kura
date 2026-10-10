@@ -122,6 +122,19 @@ export const campaigns = pgTable('campaigns', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).default(NOW),
 });
 
+// Imágenes del editor subidas a Cloudflare R2 (§7.2, §12.5).
+export const assets = pgTable('assets', {
+  id: uuid('id').primaryKey().default(UUID_DEFAULT),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  r2Key: text('r2_key').notNull(),
+  publicUrl: text('public_url').notNull(),
+  contentType: varchar('content_type', { length: 100 }),
+  sizeBytes: integer('size_bytes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(NOW),
+});
+
 export const campaignEvents = pgTable('campaign_events', {
   id: uuid('id').primaryKey().default(UUID_DEFAULT),
   campaignId: uuid('campaign_id')

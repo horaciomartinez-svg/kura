@@ -45,6 +45,14 @@ max_retries = 3
 dead_letter_queue = "kura-tracking-dlq"
 
 # ---------------------------------------------------------------------------
+# Almacenamiento de imágenes del editor (Cloudflare R2) (§12.5)
+# ---------------------------------------------------------------------------
+
+[[r2_buckets]]
+binding = "KURA_ASSETS"
+bucket_name = "kura-assets"
+
+# ---------------------------------------------------------------------------
 # Base de datos (Hyperdrive -> Supabase PostgreSQL)
 # ---------------------------------------------------------------------------
 # Deshabilitado para desarrollo local: evita requerir un connection string
