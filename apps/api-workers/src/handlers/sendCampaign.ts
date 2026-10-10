@@ -1,7 +1,7 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { QueuePayload } from '@kura/core';
 import { getDb } from '../db/client';
-import { campaigns, contacts, listMemberships, users } from '../db/schema';
+import { campaigns, contacts, listMemberships, suppressionList, users } from '../db/schema';
 import { assertCampaignCompliance, ComplianceError } from '../services/compliance';
 import type { Env } from '../types/env';
 
@@ -99,11 +99,17 @@ export async function handleSendCampaign(
         })
         .from(contacts)
         .innerJoin(listMemberships, eq(listMemberships.contactId, contacts.id))
+        // Excluir correos en la suppression list del tenant (§11.1, §11.2).
+        .leftJoin(
+          suppressionList,
+          and(eq(suppressionList.userId, userId), eq(suppressionList.email, contacts.email))
+        )
         .where(
           and(
             eq(listMemberships.listId, listId),
             eq(contacts.userId, userId),
-            eq(contacts.status, 'active')
+            eq(contacts.status, 'active'),
+            isNull(suppressionList.id)
           )
         )
         .limit(DB_PAGE_SIZE)

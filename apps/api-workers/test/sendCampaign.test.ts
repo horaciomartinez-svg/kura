@@ -14,20 +14,29 @@ interface MockData {
   campaign?: Record<string, unknown>;
   user?: Record<string, unknown>;
   contacts?: Record<string, unknown>[];
+  /** Emails presentes en suppression_list: el handler debe excluirlos. */
+  suppressedEmails?: string[];
 }
 
 /**
  * Mock mínimo del query builder de Drizzle: resuelve filas según la tabla
- * pasada a `.from(...)` y es "thenable" para que `await` funcione.
+ * pasada a `.from(...)` y es "thenable" para que `await` funcione. Emula el
+ * LEFT JOIN contra suppression_list filtrando los emails suprimidos.
  */
 function createMockDb(data: MockData) {
+  const suppressed = new Set(data.suppressedEmails ?? []);
   const db = {
     select: () => {
       let table: unknown;
       const resolveRows = (): Promise<unknown[]> => {
         if (table === campaigns) return Promise.resolve(data.campaign ? [data.campaign] : []);
         if (table === users) return Promise.resolve(data.user ? [data.user] : []);
-        if (table === contacts) return Promise.resolve(data.contacts ?? []);
+        if (table === contacts) {
+          const rows = (data.contacts ?? []).filter(
+            (contact) => !suppressed.has(String(contact.email))
+          );
+          return Promise.resolve(rows);
+        }
         return Promise.resolve([]);
       };
       const chain = {
@@ -36,6 +45,7 @@ function createMockDb(data: MockData) {
           return chain;
         },
         innerJoin: () => chain,
+        leftJoin: () => chain,
         where: () => chain,
         orderBy: () => chain,
         limit: () => chain,
@@ -169,5 +179,30 @@ describe('handleSendCampaign', () => {
       contactEmail: 'a@example.com',
       contactVars: { nombre: 'Ana', apellido: 'Pérez', email: 'a@example.com' },
     });
+  });
+
+  it('excluye los contactos presentes en suppression_list', async () => {
+    mockGetDb.mockReturnValue(
+      createMockDb({
+        campaign: draftCampaign,
+        user: activeUser,
+        contacts: [
+          { id: 'ct-1', email: 'a@example.com', firstName: 'Ana', lastName: 'Pérez' },
+          { id: 'ct-2', email: 'b@example.com', firstName: null, lastName: null },
+        ],
+        suppressedEmails: ['b@example.com'],
+      }) as never
+    );
+    const { env, sendBatch } = createEnv();
+
+    const response = await handleSendCampaign(request(), env, 'usr-1');
+    const body = (await response.json()) as { enqueued: number };
+
+    expect(response.status).toBe(202);
+    expect(body.enqueued).toBe(1);
+
+    const [batch] = sendBatch.mock.calls[0];
+    expect(batch).toHaveLength(1);
+    expect(batch[0].body.contactEmail).toBe('a@example.com');
   });
 });

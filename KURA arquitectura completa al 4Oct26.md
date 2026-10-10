@@ -1039,6 +1039,8 @@ sequenceDiagram
 
 ### 12.5 Almacenamiento de imágenes (Cloudflare R2)
 
+> **Decisión de arquitectura (ratificada 10-oct-2026):** los archivos pesados (imágenes del editor) se almacenan **exclusivamente en Cloudflare R2** — nunca en Supabase. La tabla `assets` en PostgreSQL guarda únicamente metadata liviana (~250 bytes por fila: `r2_key`, `public_url`, MIME, tamaño), lo que permite JOINs con `users` y limpieza de huérfanos sin costo de almacenamiento relevante. Patrón estándar de la industria: *metadata en la DB relacional, blobs en object storage*. No se adopta una segunda base de datos (D1) para evitar perder las consultas cruzadas y duplicar la operación de respaldos.
+
 - Bucket `kura-assets` con dominio público `cdn.kura.app` (caché Cloudflare, egreso gratis).
 - `POST /api/assets` (multipart, máx. 5 MB, tipos `image/png|jpeg|gif|webp`) → clave `assets/{user_id}/{uuid}.{ext}` → URL pública inmutable.
 - Integración con `onUploadImage` de Easy-Email: el editor sube y recibe la URL sin salir del canvas.

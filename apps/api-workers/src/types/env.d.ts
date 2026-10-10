@@ -19,6 +19,10 @@ export interface Env {
   // Cadena de conexión PostgreSQL para desarrollo local (wrangler dev, .dev.vars).
   DATABASE_URL?: string;
 
+  // Clave HMAC-SHA256 para firmar/verificar tokens de tracking y enlaces de
+  // baja (unsubscribe one-click) (§11.1). Es un secreto de producción.
+  TRACKING_HMAC_SECRET: string;
+
   // Origen oficial del frontend en producción (CORS estricto). En desarrollo se
   // permite cualquier puerto de localhost (§12.1).
   APP_ORIGIN?: string;

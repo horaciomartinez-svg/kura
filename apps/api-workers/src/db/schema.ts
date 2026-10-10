@@ -144,7 +144,45 @@ export const campaignEvents = pgTable('campaign_events', {
     .notNull()
     .references(() => contacts.id, { onDelete: 'cascade' }),
   eventType: varchar('event_type', { length: 50 }).notNull(),
+  // Correlación con AWS SES (eventos de entrega/rebote vía SNS, §11.2).
+  sesMessageId: varchar('ses_message_id', { length: 255 }),
   urlClicked: text('url_clicked'),
   isMachineOpen: boolean('is_machine_open').default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).default(NOW),
 });
+
+// Lista de supresión: correos a los que nunca se debe volver a enviar (§7.2).
+export const suppressionList = pgTable(
+  'suppression_list',
+  {
+    id: uuid('id').primaryKey().default(UUID_DEFAULT),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    email: varchar('email', { length: 255 }).notNull(),
+    reason: varchar('reason', { length: 50 }).notNull(),
+    sourceCampaignId: uuid('source_campaign_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).default(NOW),
+  },
+  (table) => ({
+    userEmailUnique: unique('suppression_list_user_id_email_unique').on(table.userId, table.email),
+  })
+);
+
+// Idempotencia de webhooks entrantes (SNS, Stripe) (§7.2, §11.2).
+export const webhookEvents = pgTable(
+  'webhook_events',
+  {
+    id: uuid('id').primaryKey().default(UUID_DEFAULT),
+    provider: varchar('provider', { length: 50 }).notNull(),
+    externalId: varchar('external_id', { length: 255 }).notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    processedAt: timestamp('processed_at', { withTimezone: true }).default(NOW),
+  },
+  (table) => ({
+    providerExternalUnique: unique('webhook_events_provider_external_id_unique').on(
+      table.provider,
+      table.externalId
+    ),
+  })
+);

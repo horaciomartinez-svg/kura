@@ -3,6 +3,8 @@ import { handleGetAsset, handleUploadAsset } from './handlers/assets';
 import { handleGetCampaign } from './handlers/getCampaign';
 import { handleSendCampaign } from './handlers/sendCampaign';
 import { handleAutosave, handleCompile, handleSaveDesign } from './handlers/saveDesign';
+import { handleUnsubscribe } from './handlers/unsubscribe';
+import { handleSnsWebhook } from './handlers/webhooks/snsEvents';
 import { processEmailQueue } from './queues/emailConsumer';
 import { processTrackingQueue } from './queues/trackingConsumer';
 import tracker from './tracking';
@@ -84,9 +86,17 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
     return json({ status: 'ok' }, 200);
   }
 
-  // Rutas públicas: Edge Tracker (opens/clicks/unsubscribe).
+  // Rutas públicas: Edge Tracker (opens/clicks).
   if (url.pathname.startsWith('/o/') || url.pathname.startsWith('/c/')) {
     return tracker.fetch(request, env, ctx);
+  }
+
+  // Unsubscribe one-click (RFC 8058): GET del enlace y POST de un clic (§11.1).
+  if (
+    (request.method === 'GET' || request.method === 'POST') &&
+    url.pathname.startsWith('/u/')
+  ) {
+    return handleUnsubscribe(request, env);
   }
 
   // Assets: servido público del binario desde R2 (solo dev; en producción lo
@@ -95,7 +105,12 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
     return handleGetAsset(request, env);
   }
 
-  // TODO(webhooks): verificar firma SNS/Stripe antes de procesar (§11.2, §12.3).
+  // Webhook de Amazon SNS para eventos de entrega de SES (firma SNS, §11.2).
+  if (url.pathname === '/webhooks/sns' && request.method === 'POST') {
+    return handleSnsWebhook(request, env);
+  }
+
+  // TODO(webhooks): verificar firma Stripe antes de procesar (§12.3).
   if (url.pathname.startsWith('/webhooks/')) {
     return new Response('Not Found', { status: 404 });
   }

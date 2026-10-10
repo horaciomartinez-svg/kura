@@ -16,3 +16,7 @@ SUPABASE_URL=https://your-project.supabase.co
 # Conexión PostgreSQL (Supabase) para desarrollo local con wrangler dev.
 # En producción se usa el binding Hyperdrive DB_POOL (ver wrangler.toml).
 DATABASE_URL=postgres://user:password@host:5432/postgres
+
+# Clave HMAC-SHA256 para firmar/verificar tokens de tracking y enlaces de baja
+# (unsubscribe one-click, §11.1). Genera una con: openssl rand -hex 32
+TRACKING_HMAC_SECRET=your-tracking-hmac-secret

@@ -114,7 +114,14 @@ export interface QueuePayload {
 /* Eventos de telemetría (Edge Tracking)                                      */
 /* -------------------------------------------------------------------------- */
 
-export type CampaignEventType = 'open' | 'click' | 'bounce' | 'complaint';
+export type CampaignEventType =
+  | 'send'
+  | 'delivery'
+  | 'open'
+  | 'click'
+  | 'bounce'
+  | 'complaint'
+  | 'unsubscribe';
 
 export interface TrackingPayload {
   campaign_id: string;
@@ -122,4 +129,6 @@ export interface TrackingPayload {
   event_type: CampaignEventType;
   url_clicked: string | null;
   is_machine_open: boolean;
+  // Identificador del mensaje en AWS SES (eventos de entrega/rebote vía SNS, §11.2).
+  ses_message_id?: string | null;
 }
