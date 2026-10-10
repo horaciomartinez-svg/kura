@@ -1,0 +1,52 @@
+diff --git a/node_modules/easy-email-editor/lib/index.js b/node_modules/easy-email-editor/lib/index.js
+index 1111111..2222222 100644
+--- a/node_modules/easy-email-editor/lib/index.js
++++ b/node_modules/easy-email-editor/lib/index.js
+@@ -6564,7 +6564,11 @@
+       contentWindowRef.current = (_a = evt.target) == null ? void 0 : _a.contentWindow;
+     };
++    if (iframe.parentNode !== document.body) {
+     document.body.appendChild(iframe);
++    }
+     return () => {
++      if (iframe.parentNode === document.body) {
+       document.body.removeChild(iframe);
++      }
+     };
+   }, [errMsg, html, iframe]);
+@@ -7262,5 +7262,5 @@
+     href: item.href,
+     rel: "stylesheet",
+     type: "text/css"
+-  }))), document.body))));
++  }))), document.head))));
+ }
+@@ -7456,14 +7456,22 @@
+     const editNode = child.querySelector("div");
+     if (editNode) {
+       if (option.enabledMergeTagsBadge) {
+         editNode.innerHTML = MergeTagBadge.transform(editNode.innerHTML);
+       }
+     }
+   });
+-  const reactNode = /* @__PURE__ */ React.createElement(RenderReactNode, {
+-    selector: "0",
+-    node: doc.documentElement,
+-    index: 0
+-  });
+-  return reactNode;
++  const headStyleNodes = [...doc.head.querySelectorAll("style")].map((node, index2) => /* @__PURE__ */ React.createElement(RenderReactNode, {
++    selector: getChildSelector(getChildSelector("0", 0), index2),
++    node,
++    index: index2,
++    key: `head-style-${index2}`
++  }));
++  const bodyNodes = [...doc.body.childNodes].map((node, index2) => /* @__PURE__ */ React.createElement(RenderReactNode, {
++    selector: getChildSelector(getChildSelector("0", 1), index2),
++    node,
++    index: index2,
++    key: `body-${index2}`
++  }));
++  const reactNode = /* @__PURE__ */ React.createElement(React.Fragment, null, headStyleNodes, bodyNodes);
++  return reactNode;
+ }

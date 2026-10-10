@@ -76,6 +76,7 @@ export function CampaignBuilder({ campaignId }: CampaignBuilderProps) {
     <ConfigProvider>
       <div className="kura-builder h-screen flex flex-col bg-surface overflow-hidden">
         <EmailEditorProvider
+          key={campaignId}
           data={initialValues}
           height={EDITOR_HEIGHT}
           onUploadImage={api.uploadAsset}

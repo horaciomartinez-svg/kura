@@ -1,0 +1,39 @@
+diff --git a/node_modules/easy-email-extensions/lib/index2.js b/node_modules/easy-email-extensions/lib/index2.js
+index a86f933..cbe974f 100644
+--- a/node_modules/easy-email-extensions/lib/index2.js
++++ b/node_modules/easy-email-extensions/lib/index2.js
+@@ -37030,6 +37030,7 @@ class TableColumnTool {
+ }
+ function TableOperation() {
+   const shadowRoot = getShadowRoot();
++  const target = shadowRoot && shadowRoot.querySelector("body");
+   const { focusIdx: focusIdx2 } = useFocusIdx();
+   const { focusBlock: focusBlock2, change } = useBlock();
+   const topRef = useRef(null);
+@@ -37044,7 +37045,7 @@ function TableOperation() {
+       left: leftRef.current,
+       right: rightRef.current
+     };
+-    tool.current = new TableColumnTool(borderTool, shadowRoot.querySelector("body"));
++    tool.current = target ? new TableColumnTool(borderTool, target) : void 0;
+     return () => {
+       var _a;
+       (_a = tool.current) == null ? void 0 : _a.destroy();
+@@ -37059,7 +37060,7 @@ function TableOperation() {
+       tool.current.tableData = lodash.exports.cloneDeep(((_b = (_a = focusBlock2 == null ? void 0 : focusBlock2.data) == null ? void 0 : _a.value) == null ? void 0 : _b.tableSource) || []);
+     }
+   }, [focusIdx2, focusBlock2]);
+-  return /* @__PURE__ */ React__default.createElement(React__default.Fragment, null, shadowRoot && createPortal(/* @__PURE__ */ React__default.createElement(React__default.Fragment, null, /* @__PURE__ */ React__default.createElement("div", null, /* @__PURE__ */ React__default.createElement("div", {
++  return /* @__PURE__ */ React__default.createElement(React__default.Fragment, null, target && createPortal(/* @__PURE__ */ React__default.createElement(React__default.Fragment, null, /* @__PURE__ */ React__default.createElement("div", null, /* @__PURE__ */ React__default.createElement("div", {
+     ref: topRef
+   }), /* @__PURE__ */ React__default.createElement("div", {
+     ref: bottomRef
+@@ -37067,7 +37068,7 @@ function TableOperation() {
+     ref: leftRef
+   }), /* @__PURE__ */ React__default.createElement("div", {
+     ref: rightRef
+-  }))), shadowRoot.querySelector("body")));
++  }))), target));
+ }
+ function AttributePanel() {
+   const { values: values2, focusBlock: focusBlock2 } = useBlock();

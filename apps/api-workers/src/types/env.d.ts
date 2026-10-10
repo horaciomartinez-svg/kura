@@ -19,6 +19,10 @@ export interface Env {
   // Cadena de conexión PostgreSQL para desarrollo local (wrangler dev, .dev.vars).
   DATABASE_URL?: string;
 
+  // Origen oficial del frontend en producción (CORS estricto). En desarrollo se
+  // permite cualquier puerto de localhost (§12.1).
+  APP_ORIGIN?: string;
+
   // Dominio público del CDN para assets (producción). Si no se define, las
   // URLs apuntan al propio Worker (solo válido en desarrollo, §12.5).
   PUBLIC_ASSETS_URL?: string;

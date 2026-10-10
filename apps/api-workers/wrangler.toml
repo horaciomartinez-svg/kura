@@ -11,6 +11,8 @@ ENVIRONMENT = "production"
 AWS_REGION = "us-east-1"
 # Limitar correos de prueba a 50
 MAX_TRIAL_SENDS = 50
+# Origen oficial del frontend (CORS estricto en producción, §12.1).
+APP_ORIGIN = "https://app.kura.app"
 
 # ---------------------------------------------------------------------------
 # Cola de envíos (Motor Asíncrono: API -> Worker Consumidor -> AWS SES)

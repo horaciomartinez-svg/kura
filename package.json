@@ -1,1 +1,14 @@
-{"name":"kura-monorepo","private":true,"workspaces":["apps/*","packages/*"]}
+{
+  "name": "kura-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "postinstall": "patch-package"
+  },
+  "devDependencies": {
+    "patch-package": "^8.0.0"
+  }
+}
