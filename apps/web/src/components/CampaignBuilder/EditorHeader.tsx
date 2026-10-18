@@ -1,13 +1,15 @@
 'use client'
 
 import React from 'react'
-import { Loader2, Save } from 'lucide-react'
+import { Loader2, Save, Send } from 'lucide-react'
 
 interface EditorHeaderProps {
   isDirty: boolean
   isSaving: boolean
+  isSending?: boolean
   lastSavedAt: Date | null
   onSaveAndContinue: () => void
+  onSend?: () => void
 }
 
 function formatTime(value: Date): string {
@@ -15,7 +17,14 @@ function formatTime(value: Date): string {
 }
 
 /** Cabecera del editor con el estado de guardado y la acción principal (§9.4). */
-export function EditorHeader({ isDirty, isSaving, lastSavedAt, onSaveAndContinue }: EditorHeaderProps) {
+export function EditorHeader({
+  isDirty,
+  isSaving,
+  isSending = false,
+  lastSavedAt,
+  onSaveAndContinue,
+  onSend,
+}: EditorHeaderProps) {
   return (
     <header className="flex items-center justify-between gap-4 px-6 py-3 border-b border-gray-100 bg-surface-card">
       <div className="flex items-center gap-3 min-w-0">
@@ -35,14 +44,27 @@ export function EditorHeader({ isDirty, isSaving, lastSavedAt, onSaveAndContinue
         )}
       </div>
 
-      <button
-        onClick={onSaveAndContinue}
-        disabled={isSaving}
-        className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-kura-md font-medium hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-        Guardar y continuar
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onSaveAndContinue}
+          disabled={isSaving || isSending}
+          className="flex items-center gap-2 border border-primary text-primary px-4 py-2 rounded-kura-md font-medium hover:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+          Guardar y continuar
+        </button>
+
+        {onSend && (
+          <button
+            onClick={onSend}
+            disabled={isSaving || isSending}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-kura-md font-medium hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            Enviar campaña
+          </button>
+        )}
+      </div>
     </header>
   )
 }

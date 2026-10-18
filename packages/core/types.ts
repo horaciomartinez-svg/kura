@@ -16,6 +16,52 @@ export interface TrialStatus {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Facturación SaaS (planes, suscripciones y cuotas) (§12.3)                  */
+/* -------------------------------------------------------------------------- */
+
+export type PlanCode = 'free' | 'pro' | 'business';
+
+/** Plan efectivo del usuario: plan comercial, trial vigente o trial expirado. */
+export type EffectivePlanCode = PlanCode | 'trial' | 'expired';
+
+export type SubscriptionStatus =
+  | 'active'
+  | 'trialing'
+  | 'past_due'
+  | 'canceled'
+  | 'incomplete';
+
+export interface BillingPlan {
+  code: PlanCode;
+  name: string;
+  priceMonthlyCents: number;
+  monthlyEmailQuota: number;
+}
+
+export interface BillingSubscription {
+  planCode: PlanCode;
+  status: SubscriptionStatus;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+/** Respuesta de GET /api/me. */
+export interface MeResponse {
+  user: {
+    id: string;
+    email: string;
+    plan: EffectivePlanCode;
+    quota: number;
+    used: number;
+    trialExpiresAt: string;
+    stripeCustomerId: string | null;
+  };
+  periodStart: string;
+  subscription: BillingSubscription | null;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Verificación de dominio                                                    */
 /* -------------------------------------------------------------------------- */
 

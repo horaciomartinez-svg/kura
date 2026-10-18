@@ -23,6 +23,13 @@ export interface Env {
   // baja (unsubscribe one-click) (§11.1). Es un secreto de producción.
   TRACKING_HMAC_SECRET: string;
 
+  // Stripe (§12.3): clave secreta, secreto de firma del webhook y price IDs de
+  // los planes comerciales. Se inyectan desde .dev.vars o `wrangler secret`.
+  STRIPE_SECRET_KEY: string;
+  STRIPE_WEBHOOK_SECRET: string;
+  STRIPE_PRICE_PRO: string;
+  STRIPE_PRICE_BUSINESS: string;
+
   // Origen oficial del frontend en producción (CORS estricto). En desarrollo se
   // permite cualquier puerto de localhost (§12.1).
   APP_ORIGIN?: string;

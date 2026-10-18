@@ -1,7 +1,13 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { QueuePayload } from '@kura/core';
 import { getDb } from '../db/client';
 import { campaigns, contacts, listMemberships, suppressionList, users } from '../db/schema';
+import {
+  currentPeriodStart,
+  getUsage,
+  incrementUsage,
+  resolveEffectivePlan,
+} from '../services/billing';
 import { assertCampaignCompliance, ComplianceError } from '../services/compliance';
 import type { Env } from '../types/env';
 
@@ -19,9 +25,33 @@ function error(code: string, message: string, status: number): Response {
   return json({ error: { code, message } }, status);
 }
 
+function quotaExceeded(quota: number, used: number): Response {
+  return json(
+    {
+      error: 'QUOTA_EXCEEDED',
+      quota,
+      used,
+      message: `La cuota mensual de tu plan es de ${quota} correos y ya usaste ${used}.`,
+    },
+    402
+  );
+}
+
+function subscriptionRequired(): Response {
+  return json(
+    {
+      error: 'SUBSCRIPTION_REQUIRED',
+      code: 'SUBSCRIPTION_REQUIRED',
+      message: 'Tu periodo de prueba expiró. Actualiza a un plan para seguir enviando.',
+    },
+    402
+  );
+}
+
 /**
- * Productor: valida la campaña, el trial y el cumplimiento, y encola los
- * envíos en lotes de 500 contactos activos sin bloquear la respuesta (§10.1).
+ * Productor: valida la campaña, el plan/cuota del tenant y el cumplimiento, y
+ * encola los envíos en lotes de 500 contactos activos sin bloquear la
+ * respuesta (§10.1, §12.2, §12.3).
  */
 export async function handleSendCampaign(
   request: Request,
@@ -51,21 +81,20 @@ export async function handleSendCampaign(
       return error('INVALID_STATUS', 'Solo se pueden enviar campañas en estado borrador.', 400);
     }
 
-    // 2. Usuario y límites del trial.
+    // 2. Plan efectivo del usuario y uso del periodo actual (§12.3).
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
     if (!user) {
       return error('USER_NOT_FOUND', 'El usuario de la campaña no existe.', 404);
     }
 
-    const maxTrialSends = Number(env.MAX_TRIAL_SENDS ?? 50);
-    if ((user.trialSendsCount ?? 0) >= maxTrialSends) {
-      return error('TRIAL_EXHAUSTED', 'Se agotó el límite de envíos del plan de prueba.', 402);
+    const effectivePlan = await resolveEffectivePlan(db, user);
+    if (effectivePlan.plan === 'expired') {
+      return subscriptionRequired();
     }
 
-    if (user.trialExpiresAt && new Date(user.trialExpiresAt).getTime() < Date.now()) {
-      return error('TRIAL_EXPIRED', 'El periodo de prueba expiró.', 402);
-    }
+    const periodStart = currentPeriodStart();
+    const used = await getUsage(db, userId, periodStart);
 
     // 3. Cumplimiento anti-spam (el HTML debe existir y ser enviable).
     try {
@@ -80,7 +109,32 @@ export async function handleSendCampaign(
       return error('SEGMENT_NOT_SUPPORTED', 'El envío por segmentos aún no está disponible.', 400);
     }
 
-    // 4. Contactos activos de la lista, paginados de 500 en 500.
+    // 4. Destinatarios elegibles (activos y no suprimidos) antes de encolar.
+    const recipientsFilter = and(
+      eq(listMemberships.listId, listId),
+      eq(contacts.userId, userId),
+      eq(contacts.status, 'active'),
+      isNull(suppressionList.id)
+    );
+
+    const [countRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(contacts)
+      .innerJoin(listMemberships, eq(listMemberships.contactId, contacts.id))
+      .leftJoin(
+        suppressionList,
+        and(eq(suppressionList.userId, userId), eq(suppressionList.email, contacts.email))
+      )
+      .where(recipientsFilter);
+
+    const recipients = Number(countRow?.count ?? 0);
+
+    // Enforcement antes de encolar: uso del periodo + destinatarios ≤ cuota.
+    if (used + recipients > effectivePlan.quota) {
+      return quotaExceeded(effectivePlan.quota, used);
+    }
+
+    // 5. Contactos activos de la lista, paginados de 500 en 500.
     const basePayload = {
       campaignId,
       fromEmail: campaign.fromEmail,
@@ -104,14 +158,7 @@ export async function handleSendCampaign(
           suppressionList,
           and(eq(suppressionList.userId, userId), eq(suppressionList.email, contacts.email))
         )
-        .where(
-          and(
-            eq(listMemberships.listId, listId),
-            eq(contacts.userId, userId),
-            eq(contacts.status, 'active'),
-            isNull(suppressionList.id)
-          )
-        )
+        .where(recipientsFilter)
         .limit(DB_PAGE_SIZE)
         .offset(offset);
 
@@ -139,7 +186,10 @@ export async function handleSendCampaign(
       if (rows.length < DB_PAGE_SIZE) break;
     }
 
-    // 5. Marcar la campaña como en envío.
+    // 6. Contabilizar el uso del periodo (upsert atómico, §12.3).
+    await incrementUsage(db, userId, periodStart, enqueued);
+
+    // 7. Marcar la campaña como en envío.
     await db
       .update(campaigns)
       .set({

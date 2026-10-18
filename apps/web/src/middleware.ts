@@ -2,7 +2,14 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 // Rutas que exigen sesión y rutas que estando autenticado redirigen al dashboard.
-const PROTECTED_PREFIXES = ['/dashboard', '/campaigns', '/builder', '/domains', '/contacts']
+const PROTECTED_PREFIXES = [
+  '/dashboard',
+  '/campaigns',
+  '/builder',
+  '/domains',
+  '/contacts',
+  '/billing',
+]
 const AUTH_ROUTES = new Set(['/login', '/register'])
 
 export async function middleware(request: NextRequest) {

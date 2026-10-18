@@ -19,6 +19,7 @@ import {
   Timer,
   Pencil,
   Copy,
+  CreditCard,
   Plus,
   ShieldAlert,
 } from 'lucide-react'
@@ -88,7 +89,7 @@ export function MainDashboard({
               {trial.sendsUsed}/{trial.sendsLimit} envíos.
             </span>
           )}
-          <Link href="/settings/billing" className="ml-auto font-medium underline text-accent-hover">
+          <Link href="/billing" className="ml-auto font-medium underline text-accent-hover">
             Actualizar a Pro
           </Link>
         </div>
@@ -103,13 +104,22 @@ export function MainDashboard({
               Aquí tienes el resumen de tu rendimiento en los últimos 30 días.
             </p>
           </div>
-          <Link
-            href="/builder"
-            className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-kura-md hover:bg-primary-hover transition-colors font-medium shadow-kura-soft"
-          >
-            <Plus size={18} />
-            Crear nueva campaña
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/billing"
+              className="flex items-center gap-2 border border-primary text-primary px-4 py-3 rounded-kura-md hover:bg-surface-card transition-colors font-medium"
+            >
+              <CreditCard size={18} />
+              Facturación
+            </Link>
+            <Link
+              href="/builder"
+              className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-kura-md hover:bg-primary-hover transition-colors font-medium shadow-kura-soft"
+            >
+              <Plus size={18} />
+              Crear nueva campaña
+            </Link>
+          </div>
         </header>
 
         {/* Nivel 1: KPIs */}

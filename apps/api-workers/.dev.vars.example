@@ -20,3 +20,9 @@ DATABASE_URL=postgres://user:password@host:5432/postgres
 # Clave HMAC-SHA256 para firmar/verificar tokens de tracking y enlaces de baja
 # (unsubscribe one-click, §11.1). Genera una con: openssl rand -hex 32
 TRACKING_HMAC_SECRET=your-tracking-hmac-secret
+
+# Stripe (§12.3): Checkout, Customer Portal y webhooks de suscripción.
+STRIPE_SECRET_KEY=sk_test_your-secret-key
+STRIPE_WEBHOOK_SECRET=whsec_your-webhook-secret
+STRIPE_PRICE_PRO=price_your-pro-price-id
+STRIPE_PRICE_BUSINESS=price_your-business-price-id

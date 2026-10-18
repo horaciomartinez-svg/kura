@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  date,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -24,6 +26,7 @@ import type { EasyEmailAST } from '@kura/core';
 
 // Expresiones por defecto alineadas con schema.sql (uuid-ossp + CURRENT_TIMESTAMP).
 const UUID_DEFAULT = sql`uuid_generate_v4()`;
+const UUID_DEFAULT_GEN = sql`gen_random_uuid()`;
 const NOW = sql`CURRENT_TIMESTAMP`;
 
 export const users = pgTable('users', {
@@ -32,8 +35,64 @@ export const users = pgTable('users', {
   status: varchar('status', { length: 50 }).default('active'),
   trialSendsCount: integer('trial_sends_count').default(0),
   trialExpiresAt: timestamp('trial_expires_at', { withTimezone: true }).notNull(),
+  // Customer de Stripe vinculado al usuario (migración 0008, §12.3).
+  stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
   createdAt: timestamp('created_at', { withTimezone: true }).default(NOW),
 });
+
+// Catálogo de planes comerciales (migración 0008, §12.3).
+export const plans = pgTable('plans', {
+  code: varchar('code', { length: 50 }).primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  priceMonthlyCents: integer('price_monthly_cents').notNull().default(0),
+  monthlyEmailQuota: integer('monthly_email_quota').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(NOW),
+});
+
+// Suscripción Stripe del tenant (migración 0008, §12.3).
+export const subscriptions = pgTable(
+  'subscriptions',
+  {
+    id: uuid('id').primaryKey().default(UUID_DEFAULT_GEN),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    planCode: varchar('plan_code', { length: 50 })
+      .notNull()
+      .references(() => plans.code),
+    stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
+    stripeSubscriptionId: varchar('stripe_subscription_id', { length: 255 }).unique(),
+    status: varchar('status', { length: 50 }).notNull().default('incomplete'),
+    currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
+    currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+    cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).default(NOW),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).default(NOW),
+  },
+  (table) => ({
+    userIdx: index('idx_subscriptions_user_id').on(table.userId),
+  })
+);
+
+// Correos enviados por usuario y periodo mensual (migración 0008, §12.3).
+export const usageCounters = pgTable(
+  'usage_counters',
+  {
+    id: uuid('id').primaryKey().default(UUID_DEFAULT_GEN),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    periodStart: date('period_start', { mode: 'string' }).notNull(),
+    emailsSent: integer('emails_sent').notNull().default(0),
+  },
+  (table) => ({
+    userPeriodUnique: unique('usage_counters_user_id_period_start_unique').on(
+      table.userId,
+      table.periodStart
+    ),
+    userPeriodIdx: index('idx_usage_counters_user_period').on(table.userId, table.periodStart),
+  })
+);
 
 export const verifiedDomains = pgTable(
   'verified_domains',

@@ -14,7 +14,8 @@
     "@kura/core": "*",
     "drizzle-orm": "^0.30.0",
     "mjml": "^4.15.3",
-    "postgres": "^3.4.4"
+    "postgres": "^3.4.4",
+    "stripe": "^23.0.0"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.7.0",

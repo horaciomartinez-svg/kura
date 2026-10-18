@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { ConfigProvider } from '@arco-design/web-react'
 import { EmailEditor, EmailEditorProvider } from 'easy-email-editor'
 import type { IEmailTemplate } from 'easy-email-editor'
@@ -8,7 +9,7 @@ import { SimpleLayout } from 'easy-email-extensions'
 import type { FormApi, FormState } from 'final-form'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import type { EasyEmailAST } from '@kura/core'
-import { api } from '@/lib/api'
+import { api, isQuotaExceeded } from '@/lib/api'
 import { EditorHeader } from './EditorHeader'
 import { KURA_EDITOR_LOCALE } from './locale'
 import { KURA_MERGE_TAGS, createEmailTemplate } from './templates'
@@ -87,6 +88,7 @@ export function CampaignBuilder({ campaignId }: CampaignBuilderProps) {
         >
           {(_state: FormState<IEmailTemplate>, helper: TemplateFormApi) => (
             <EditorWorkspace
+              campaignId={campaignId}
               helper={helper}
               notifyChange={persistence.notifyChange}
               saveAndContinue={persistence.saveAndContinue}
@@ -104,6 +106,7 @@ export function CampaignBuilder({ campaignId }: CampaignBuilderProps) {
 }
 
 interface EditorWorkspaceProps {
+  campaignId: string
   helper: TemplateFormApi
   notifyChange: (ast: EasyEmailAST) => void
   saveAndContinue: (ast: EasyEmailAST) => Promise<void>
@@ -114,11 +117,17 @@ interface EditorWorkspaceProps {
   loadError: string | null
 }
 
+interface SendError {
+  message: string
+  billingLink: boolean
+}
+
 /**
  * Suscribe el editor a los cambios del formulario (react-final-form) para
  * disparar el autosave, y ofrece la acción "Guardar y continuar".
  */
 function EditorWorkspace({
+  campaignId,
   helper,
   notifyChange,
   saveAndContinue,
@@ -130,6 +139,8 @@ function EditorWorkspace({
 }: EditorWorkspaceProps) {
   const valuesRef = useRef<EasyEmailAST | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [sendError, setSendError] = useState<SendError | null>(null)
+  const [isSending, setIsSending] = useState(false)
 
   useEffect(() => {
     const unsubscribe = helper.subscribe(
@@ -156,16 +167,64 @@ function EditorWorkspace({
     })
   }, [helper, saveAndContinue])
 
+  const handleSend = useCallback(async () => {
+    const ast =
+      valuesRef.current ??
+      (helper.getState().values?.content as unknown as EasyEmailAST | undefined)
+    if (!ast) return
+
+    setSaveError(null)
+    setSendError(null)
+    setIsSending(true)
+
+    try {
+      // Compila y persiste el HTML antes de encolar el envío.
+      await saveAndContinue(ast)
+      await api.sendCampaign(campaignId)
+    } catch (err) {
+      if (isQuotaExceeded(err)) {
+        setSendError({
+          message: `Alcanzaste la cuota de tu plan (${err.quota ?? 0} correos/mes, ${err.used ?? 0} usados). Actualiza tu plan para seguir enviando.`,
+          billingLink: true,
+        })
+      } else if (
+        err instanceof Error &&
+        'code' in err &&
+        (err as { code?: string }).code === 'SUBSCRIPTION_REQUIRED'
+      ) {
+        setSendError({
+          message: 'Tu periodo de prueba expiró. Actualiza a un plan para seguir enviando.',
+          billingLink: true,
+        })
+      } else {
+        setSendError({
+          message:
+            err instanceof Error ? err.message : 'No se pudo iniciar el envío de la campaña.',
+          billingLink: false,
+        })
+      }
+    } finally {
+      setIsSending(false)
+    }
+  }, [campaignId, helper, saveAndContinue])
+
   return (
     <>
       <EditorHeader
         isDirty={isDirty}
         isSaving={isSaving}
+        isSending={isSending}
         lastSavedAt={lastSavedAt}
         onSaveAndContinue={handleSaveAndContinue}
+        onSend={handleSend}
       />
 
-      <Notices loadError={loadError} saveError={saveError} warnings={warnings} />
+      <Notices
+        loadError={loadError}
+        saveError={saveError}
+        sendError={sendError}
+        warnings={warnings}
+      />
 
       <SimpleLayout>
         <EmailEditor />
@@ -177,18 +236,28 @@ function EditorWorkspace({
 interface NoticesProps {
   loadError: string | null
   saveError: string | null
+  sendError: SendError | null
   warnings: string[]
 }
 
-/** Avisos no bloqueantes: errores de carga/guardado y advertencias de MJML (§9.4). */
-function Notices({ loadError, saveError, warnings }: NoticesProps) {
-  const hasNotices = Boolean(loadError || saveError) || warnings.length > 0
+/** Avisos no bloqueantes: errores de carga/guardado/envío y advertencias (§9.4). */
+function Notices({ loadError, saveError, sendError, warnings }: NoticesProps) {
+  const hasNotices = Boolean(loadError || saveError || sendError) || warnings.length > 0
   if (!hasNotices) return null
 
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2">
       {loadError && <Notice tone="amber" title="Aviso" message={loadError} />}
       {saveError && <Notice tone="red" title="Error al guardar" message={saveError} />}
+      {sendError && (
+        <Notice
+          tone={sendError.billingLink ? 'amber' : 'red'}
+          title={sendError.billingLink ? 'Límite de envíos' : 'Error al enviar'}
+          message={sendError.message}
+          href={sendError.billingLink ? '/billing' : undefined}
+          hrefLabel="Ver planes y facturación"
+        />
+      )}
       {warnings.length > 0 && (
         <Notice
           tone="amber"
@@ -204,10 +273,14 @@ function Notice({
   tone,
   title,
   message,
+  href,
+  hrefLabel,
 }: {
   tone: 'amber' | 'red'
   title: string
   message: string
+  href?: string
+  hrefLabel?: string
 }) {
   const palette =
     tone === 'amber'
@@ -223,6 +296,14 @@ function Notice({
       <div>
         <p className="font-medium">{title}</p>
         <p className="mt-0.5 leading-relaxed">{message}</p>
+        {href && (
+          <Link
+            href={href}
+            className="mt-1.5 inline-block font-medium underline hover:no-underline"
+          >
+            {hrefLabel ?? 'Ver más'}
+          </Link>
+        )}
       </div>
     </div>
   )

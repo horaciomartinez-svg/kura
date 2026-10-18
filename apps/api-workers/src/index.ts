@@ -1,10 +1,16 @@
 import type { MessageBatch } from '@cloudflare/workers-types';
 import { handleGetAsset, handleUploadAsset } from './handlers/assets';
+import {
+  handleCreateCheckout,
+  handleCreatePortal,
+  handleGetMe,
+} from './handlers/billing';
 import { handleGetCampaign } from './handlers/getCampaign';
 import { handleSendCampaign } from './handlers/sendCampaign';
 import { handleAutosave, handleCompile, handleSaveDesign } from './handlers/saveDesign';
 import { handleUnsubscribe } from './handlers/unsubscribe';
 import { handleSnsWebhook } from './handlers/webhooks/snsEvents';
+import { handleStripeWebhook } from './handlers/webhooks/stripeEvents';
 import { processEmailQueue } from './queues/emailConsumer';
 import { processTrackingQueue } from './queues/trackingConsumer';
 import tracker from './tracking';
@@ -110,7 +116,11 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
     return handleSnsWebhook(request, env);
   }
 
-  // TODO(webhooks): verificar firma Stripe antes de procesar (§12.3).
+  // Webhook de Stripe: firma Stripe-Signature + idempotencia (§12.3).
+  if (url.pathname === '/webhooks/stripe' && request.method === 'POST') {
+    return handleStripeWebhook(request, env);
+  }
+
   if (url.pathname.startsWith('/webhooks/')) {
     return new Response('Not Found', { status: 404 });
   }
@@ -120,6 +130,19 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
     const auth = await authenticateRequest(request, env);
     if (!auth.ok) return auth.response;
     const userId = auth.user.id;
+
+    // Facturación SaaS: Stripe Checkout, Customer Portal y plan efectivo (§12.3).
+    if (request.method === 'POST' && url.pathname === '/api/billing/checkout') {
+      return handleCreateCheckout(request, env, userId);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/billing/portal') {
+      return handleCreatePortal(request, env, userId);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/me') {
+      return handleGetMe(request, env, userId);
+    }
 
     // Subida de imágenes del editor a R2 (§12.5).
     if (request.method === 'POST' && url.pathname === '/api/assets') {

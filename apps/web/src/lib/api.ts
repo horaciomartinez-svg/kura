@@ -1,7 +1,25 @@
-import type { EasyEmailAST } from '@kura/core'
+import type { EasyEmailAST, MeResponse, PlanCode } from '@kura/core'
 import { createClient } from '@/lib/supabase/client'
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787').replace(/\/$/, '')
+
+/** Error tipado de la API: conserva status y código para el manejo de cuotas. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly code?: string,
+    public readonly quota?: number,
+    public readonly used?: number
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+export function isQuotaExceeded(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.code === 'QUOTA_EXCEEDED'
+}
 
 /** Campaña devuelta por GET /api/campaigns/:id (columnas Drizzle en camelCase). */
 export interface Campaign {
@@ -34,13 +52,36 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     let message = `API request failed: ${response.status} ${response.statusText}`
+    let code: string | undefined
+    let quota: number | undefined
+    let used: number | undefined
+
     try {
-      const body = (await response.json()) as { error?: { message?: string } }
-      if (body?.error?.message) message = body.error.message
+      const body = (await response.json()) as {
+        error?: { code?: string; message?: string } | string
+        code?: string
+        message?: string
+        quota?: number
+        used?: number
+      }
+
+      if (typeof body?.error === 'string') {
+        code = body.error
+      } else if (body?.error?.code) {
+        code = body.error.code
+      }
+      code = code ?? body?.code
+      quota = body?.quota
+      used = body?.used
+
+      const responseMessage =
+        typeof body?.error === 'object' ? body.error?.message : body?.message
+      if (responseMessage) message = responseMessage
     } catch {
       // El cuerpo de error no era JSON; se conserva el mensaje genérico.
     }
-    throw new Error(message)
+
+    throw new ApiError(message, response.status, code, quota, used)
   }
 
   return response.json() as Promise<T>
@@ -86,6 +127,19 @@ export const api = {
   },
 
   uploadAsset,
+
+  getMe: () => request<MeResponse>('/api/me'),
+
+  createCheckout: (plan: Exclude<PlanCode, 'free'>) =>
+    request<{ url: string }>('/api/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ plan }),
+    }),
+
+  createPortal: () =>
+    request<{ url: string }>('/api/billing/portal', {
+      method: 'GET',
+    }),
 
   sendCampaign: (campaignId: string) =>
     request<{ message: string; enqueued: number }>(`/api/campaigns/${campaignId}/send`, {

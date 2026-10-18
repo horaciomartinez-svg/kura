@@ -6,13 +6,25 @@ vi.mock('../src/db/client', () => ({ getDb: vi.fn() }));
 
 import { getDb } from '../src/db/client';
 import { handleSendCampaign } from '../src/handlers/sendCampaign';
-import { campaigns, contacts, users } from '../src/db/schema';
+import {
+  campaigns,
+  contacts,
+  plans,
+  subscriptions,
+  usageCounters,
+  users,
+} from '../src/db/schema';
 
 const mockGetDb = vi.mocked(getDb);
 
 interface MockData {
   campaign?: Record<string, unknown>;
   user?: Record<string, unknown>;
+  subscription?: Record<string, unknown>;
+  /** Cuota mensual devuelta por `plans`. */
+  planQuota?: number;
+  /** Correos ya usados en el periodo actual. */
+  used?: number;
   contacts?: Record<string, unknown>[];
   /** Emails presentes en suppression_list: el handler debe excluirlos. */
   suppressedEmails?: string[];
@@ -21,24 +33,39 @@ interface MockData {
 /**
  * Mock mínimo del query builder de Drizzle: resuelve filas según la tabla
  * pasada a `.from(...)` y es "thenable" para que `await` funcione. Emula el
- * LEFT JOIN contra suppression_list filtrando los emails suprimidos.
+ * LEFT JOIN contra suppression_list y los contadores de uso.
  */
 function createMockDb(data: MockData) {
   const suppressed = new Set(data.suppressedEmails ?? []);
+  const usageUpserts: Record<string, unknown>[] = [];
+
+  const eligibleContacts = () =>
+    (data.contacts ?? []).filter((contact) => !suppressed.has(String(contact.email)));
+
   const db = {
-    select: () => {
+    select: (selection?: Record<string, unknown>) => {
       let table: unknown;
       const resolveRows = (): Promise<unknown[]> => {
         if (table === campaigns) return Promise.resolve(data.campaign ? [data.campaign] : []);
         if (table === users) return Promise.resolve(data.user ? [data.user] : []);
+        if (table === subscriptions) {
+          return Promise.resolve(data.subscription ? [data.subscription] : []);
+        }
+        if (table === plans) {
+          return Promise.resolve([{ monthlyEmailQuota: data.planQuota ?? 500 }]);
+        }
+        if (table === usageCounters) {
+          return Promise.resolve([{ emailsSent: data.used ?? 0 }]);
+        }
         if (table === contacts) {
-          const rows = (data.contacts ?? []).filter(
-            (contact) => !suppressed.has(String(contact.email))
-          );
-          return Promise.resolve(rows);
+          if (selection && 'count' in selection) {
+            return Promise.resolve([{ count: eligibleContacts().length }]);
+          }
+          return Promise.resolve(eligibleContacts());
         }
         return Promise.resolve([]);
       };
+
       const chain = {
         from: (t: unknown) => {
           table = t;
@@ -55,6 +82,14 @@ function createMockDb(data: MockData) {
       };
       return chain;
     },
+    insert: (table: unknown) => ({
+      values: (values: Record<string, unknown>) => ({
+        onConflictDoUpdate: () => {
+          if (table === usageCounters) usageUpserts.push(values);
+          return Promise.resolve(undefined);
+        },
+      }),
+    }),
     update: () => {
       const chain = {
         set: () => chain,
@@ -66,7 +101,8 @@ function createMockDb(data: MockData) {
       return chain;
     },
   };
-  return db;
+
+  return { db, usageUpserts };
 }
 
 function createEnv(): { env: Env; sendBatch: ReturnType<typeof vi.fn> } {
@@ -110,7 +146,7 @@ describe('handleSendCampaign', () => {
   });
 
   it('devuelve 404 si la campaña no existe', async () => {
-    mockGetDb.mockReturnValue(createMockDb({}) as never);
+    mockGetDb.mockReturnValue(createMockDb({}).db as never);
     const { env } = createEnv();
 
     const response = await handleSendCampaign(request(), env, 'usr-1');
@@ -120,26 +156,86 @@ describe('handleSendCampaign', () => {
     expect(body.error.code).toBe('CAMPAIGN_NOT_FOUND');
   });
 
-  it('devuelve 402 si el trial agotó sus envíos', async () => {
+  it('devuelve 402 SUBSCRIPTION_REQUIRED si el trial expiró sin suscripción', async () => {
     mockGetDb.mockReturnValue(
       createMockDb({
         campaign: draftCampaign,
-        user: { ...activeUser, trialSendsCount: 50 },
-      }) as never
+        user: {
+          ...activeUser,
+          trialExpiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      }).db as never
     );
     const { env, sendBatch } = createEnv();
 
     const response = await handleSendCampaign(request(), env, 'usr-1');
-    const body = (await response.json()) as { error: { code: string } };
+    const body = (await response.json()) as { error: string };
 
     expect(response.status).toBe(402);
-    expect(body.error.code).toBe('TRIAL_EXHAUSTED');
+    expect(body.error).toBe('SUBSCRIPTION_REQUIRED');
+    expect(sendBatch).not.toHaveBeenCalled();
+  });
+
+  it('devuelve 402 QUOTA_EXCEEDED con quota/used cuando se excede la cuota', async () => {
+    mockGetDb.mockReturnValue(
+      createMockDb({
+        campaign: draftCampaign,
+        user: activeUser,
+        planQuota: 500,
+        used: 499,
+        contacts: [
+          { id: 'ct-1', email: 'a@example.com', firstName: 'Ana', lastName: 'Pérez' },
+          { id: 'ct-2', email: 'b@example.com', firstName: null, lastName: null },
+        ],
+      }).db as never
+    );
+    const { env, sendBatch } = createEnv();
+
+    const response = await handleSendCampaign(request(), env, 'usr-1');
+    const body = (await response.json()) as { error: string; quota: number; used: number };
+
+    expect(response.status).toBe(402);
+    expect(body).toMatchObject({ error: 'QUOTA_EXCEEDED', quota: 500, used: 499 });
+    expect(sendBatch).not.toHaveBeenCalled();
+  });
+
+  it('usa la cuota del plan de una suscripción activa', async () => {
+    mockGetDb.mockReturnValue(
+      createMockDb({
+        campaign: draftCampaign,
+        user: activeUser,
+        subscription: {
+          id: 'sub-1',
+          userId: 'usr-1',
+          planCode: 'pro',
+          status: 'active',
+          createdAt: new Date(),
+        },
+        planQuota: 10000,
+        used: 9999,
+        contacts: [
+          { id: 'ct-1', email: 'a@example.com', firstName: 'Ana', lastName: 'Pérez' },
+          { id: 'ct-2', email: 'b@example.com', firstName: null, lastName: null },
+        ],
+      }).db as never
+    );
+    const { env, sendBatch } = createEnv();
+
+    const response = await handleSendCampaign(request(), env, 'usr-1');
+    const body = (await response.json()) as { error: string; quota: number; used: number };
+
+    expect(response.status).toBe(402);
+    expect(body).toMatchObject({ error: 'QUOTA_EXCEEDED', quota: 10000, used: 9999 });
     expect(sendBatch).not.toHaveBeenCalled();
   });
 
   it('devuelve 422 si falta el HTML y no cumple la normativa', async () => {
     mockGetDb.mockReturnValue(
-      createMockDb({ campaign: { ...draftCampaign, htmlContent: null }, user: activeUser }) as never
+      createMockDb({
+        campaign: { ...draftCampaign, htmlContent: null },
+        user: activeUser,
+        planQuota: 500,
+      }).db as never
     );
     const { env, sendBatch } = createEnv();
 
@@ -151,17 +247,18 @@ describe('handleSendCampaign', () => {
     expect(sendBatch).not.toHaveBeenCalled();
   });
 
-  it('encola los contactos activos y marca la campaña como sending', async () => {
-    mockGetDb.mockReturnValue(
-      createMockDb({
-        campaign: draftCampaign,
-        user: activeUser,
-        contacts: [
-          { id: 'ct-1', email: 'a@example.com', firstName: 'Ana', lastName: 'Pérez' },
-          { id: 'ct-2', email: 'b@example.com', firstName: null, lastName: null },
-        ],
-      }) as never
-    );
+  it('encola los contactos activos, marca sending e incrementa el uso', async () => {
+    const mock = createMockDb({
+      campaign: draftCampaign,
+      user: activeUser,
+      planQuota: 500,
+      used: 0,
+      contacts: [
+        { id: 'ct-1', email: 'a@example.com', firstName: 'Ana', lastName: 'Pérez' },
+        { id: 'ct-2', email: 'b@example.com', firstName: null, lastName: null },
+      ],
+    });
+    mockGetDb.mockReturnValue(mock.db as never);
     const { env, sendBatch } = createEnv();
 
     const response = await handleSendCampaign(request(), env, 'usr-1');
@@ -179,20 +276,24 @@ describe('handleSendCampaign', () => {
       contactEmail: 'a@example.com',
       contactVars: { nombre: 'Ana', apellido: 'Pérez', email: 'a@example.com' },
     });
+
+    expect(mock.usageUpserts).toHaveLength(1);
+    expect(mock.usageUpserts[0]).toMatchObject({ userId: 'usr-1', emailsSent: 2 });
   });
 
   it('excluye los contactos presentes en suppression_list', async () => {
-    mockGetDb.mockReturnValue(
-      createMockDb({
-        campaign: draftCampaign,
-        user: activeUser,
-        contacts: [
-          { id: 'ct-1', email: 'a@example.com', firstName: 'Ana', lastName: 'Pérez' },
-          { id: 'ct-2', email: 'b@example.com', firstName: null, lastName: null },
-        ],
-        suppressedEmails: ['b@example.com'],
-      }) as never
-    );
+    const mock = createMockDb({
+      campaign: draftCampaign,
+      user: activeUser,
+      planQuota: 500,
+      used: 0,
+      contacts: [
+        { id: 'ct-1', email: 'a@example.com', firstName: 'Ana', lastName: 'Pérez' },
+        { id: 'ct-2', email: 'b@example.com', firstName: null, lastName: null },
+      ],
+      suppressedEmails: ['b@example.com'],
+    });
+    mockGetDb.mockReturnValue(mock.db as never);
     const { env, sendBatch } = createEnv();
 
     const response = await handleSendCampaign(request(), env, 'usr-1');
@@ -204,5 +305,7 @@ describe('handleSendCampaign', () => {
     const [batch] = sendBatch.mock.calls[0];
     expect(batch).toHaveLength(1);
     expect(batch[0].body.contactEmail).toBe('a@example.com');
+
+    expect(mock.usageUpserts[0]).toMatchObject({ userId: 'usr-1', emailsSent: 1 });
   });
 });
