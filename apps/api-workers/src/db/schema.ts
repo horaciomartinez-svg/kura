@@ -178,6 +178,8 @@ export const campaigns = pgTable('campaigns', {
   startedAt: timestamp('started_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   totalRecipients: integer('total_recipients').default(0),
+  // Errores del dispatcher programado (migración 0010).
+  lastError: text('last_error'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(NOW),
   updatedAt: timestamp('updated_at', { withTimezone: true }).default(NOW),
 });

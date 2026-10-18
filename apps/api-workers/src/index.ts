@@ -1,13 +1,19 @@
-import type { MessageBatch } from '@cloudflare/workers-types';
+import type { MessageBatch, ScheduledController } from '@cloudflare/workers-types';
 import { handleGetAsset, handleUploadAsset } from './handlers/assets';
 import {
   handleCreateCheckout,
   handleCreatePortal,
   handleGetMe,
 } from './handlers/billing';
+import { handleCreateCampaign, handleListCampaigns } from './handlers/campaigns';
 import { handleImportContacts, handleListContacts } from './handlers/contacts';
 import { handleGetCampaign } from './handlers/getCampaign';
+import {
+  handleCancelCampaignSchedule,
+  handleScheduleCampaign,
+} from './handlers/scheduleCampaign';
 import { handleSendCampaign } from './handlers/sendCampaign';
+import { dispatchScheduledCampaigns } from './services/scheduledDispatcher';
 import { handleAutosave, handleCompile, handleSaveDesign } from './handlers/saveDesign';
 import { handleUnsubscribe } from './handlers/unsubscribe';
 import { handleSnsWebhook } from './handlers/webhooks/snsEvents';
@@ -159,6 +165,15 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
       return handleUploadAsset(request, env, userId);
     }
 
+    // Campañas: creación y listado real del tenant.
+    if (request.method === 'POST' && url.pathname === '/api/campaigns') {
+      return handleCreateCampaign(request, env, userId);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/campaigns') {
+      return handleListCampaigns(request, env, userId);
+    }
+
     // Detalle de campaña: carga del AST en el editor (§9.4).
     if (request.method === 'GET' && url.pathname.match(/^\/api\/campaigns\/[^/]+$/)) {
       return handleGetCampaign(request, env, userId);
@@ -166,6 +181,21 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
 
     if (request.method === 'POST' && url.pathname.match(/^\/api\/campaigns\/[^/]+\/send$/)) {
       return handleSendCampaign(request, env, userId);
+    }
+
+    // Envíos programados (§8.4): agendar y cancelar programación.
+    if (
+      request.method === 'POST' &&
+      url.pathname.match(/^\/api\/campaigns\/[^/]+\/schedule$/)
+    ) {
+      return handleScheduleCampaign(request, env, userId);
+    }
+
+    if (
+      request.method === 'POST' &&
+      url.pathname.match(/^\/api\/campaigns\/[^/]+\/cancel-schedule$/)
+    ) {
+      return handleCancelCampaignSchedule(request, env, userId);
     }
 
     // Autosave del AST de Easy-Email (§9.4).
@@ -208,6 +238,20 @@ export default {
         request,
         env
       );
+    }
+  },
+
+  // Cron Trigger: despacho minuto a minuto de campañas programadas (§8.4).
+  async scheduled(
+    _event: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<void> {
+    try {
+      await dispatchScheduledCampaigns(env, ctx);
+    } catch (err) {
+      // El dispatcher ya aísla errores por campaña; esto cubre fallos globales.
+      console.error('[cron] Error no controlado en el dispatcher:', err);
     }
   },
 

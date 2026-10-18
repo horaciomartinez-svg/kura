@@ -1,15 +1,17 @@
 'use client'
 
 import React from 'react'
-import { Loader2, Save, Send } from 'lucide-react'
+import { CalendarClock, Loader2, Save, Send } from 'lucide-react'
 
 interface EditorHeaderProps {
   isDirty: boolean
   isSaving: boolean
   isSending?: boolean
+  isScheduling?: boolean
   lastSavedAt: Date | null
   onSaveAndContinue: () => void
   onSend?: () => void
+  onSchedule?: () => void
 }
 
 function formatTime(value: Date): string {
@@ -21,9 +23,11 @@ export function EditorHeader({
   isDirty,
   isSaving,
   isSending = false,
+  isScheduling = false,
   lastSavedAt,
   onSaveAndContinue,
   onSend,
+  onSchedule,
 }: EditorHeaderProps) {
   return (
     <header className="flex items-center justify-between gap-4 px-6 py-3 border-b border-gray-100 bg-surface-card">
@@ -47,17 +51,32 @@ export function EditorHeader({
       <div className="flex items-center gap-2">
         <button
           onClick={onSaveAndContinue}
-          disabled={isSaving || isSending}
+          disabled={isSaving || isSending || isScheduling}
           className="flex items-center gap-2 border border-primary text-primary px-4 py-2 rounded-kura-md font-medium hover:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
           Guardar y continuar
         </button>
 
+        {onSchedule && (
+          <button
+            onClick={onSchedule}
+            disabled={isSaving || isSending || isScheduling}
+            className="flex items-center gap-2 border border-gray-300 text-typography px-4 py-2 rounded-kura-md font-medium hover:border-primary hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isScheduling ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <CalendarClock size={16} />
+            )}
+            Programar envío
+          </button>
+        )}
+
         {onSend && (
           <button
             onClick={onSend}
-            disabled={isSaving || isSending}
+            disabled={isSaving || isSending || isScheduling}
             className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-kura-md font-medium hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}

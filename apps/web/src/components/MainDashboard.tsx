@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -18,21 +18,17 @@ import {
   MousePointerClick,
   Timer,
   Pencil,
+  CalendarX,
   Copy,
   CreditCard,
+  Loader2,
   Plus,
   ShieldAlert,
   Users,
+  X,
 } from 'lucide-react'
-import type { TrialStatus } from '@kura/core'
-
-export type CampaignStatus =
-  | 'draft'
-  | 'scheduled'
-  | 'preparing'
-  | 'sending'
-  | 'sent'
-  | 'paused_trial_expired'
+import type { CampaignStatus, TrialStatus } from '@kura/core'
+import { api } from '@/lib/api'
 
 export interface DashboardStats {
   totalSends: number
@@ -48,7 +44,27 @@ export interface CampaignRow {
   listName: string
   status: CampaignStatus
   date: string
+  scheduledAt?: string | null
   engagement: number
+}
+
+function formatScheduledLocal(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('es-CL', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
+function formatDateLocal(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleDateString('es-CL', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
 }
 
 export interface PerformancePoint {
@@ -60,7 +76,6 @@ export interface PerformancePoint {
 interface MainDashboardProps {
   userName: string
   stats: DashboardStats
-  campaigns: CampaignRow[]
   performance: PerformancePoint[]
   onClone?: (campaignId: string) => void
 }
@@ -68,13 +83,118 @@ interface MainDashboardProps {
 export function MainDashboard({
   userName,
   stats,
-  campaigns,
   performance,
   onClone,
 }: MainDashboardProps) {
   const router = useRouter()
   const { trial } = stats
   const showTrialBanner = trial.isTrial && trial.daysRemaining <= 3
+
+  const [rows, setRows] = useState<CampaignRow[]>([])
+  const [loadingCampaigns, setLoadingCampaigns] = useState(true)
+  const [campaignsError, setCampaignsError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [cancelingId, setCancelingId] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [newCampaignName, setNewCampaignName] = useState('')
+  const [newCampaignSubject, setNewCampaignSubject] = useState('')
+  const [createError, setCreateError] = useState<string | null>(null)
+
+  const loadCampaigns = async () => {
+    setLoadingCampaigns(true)
+    setCampaignsError(null)
+
+    try {
+      const campaigns = await api.listCampaigns()
+      setRows(
+        campaigns.map((campaign) => ({
+          id: campaign.id,
+          name: campaign.name,
+          listName: campaign.listName ?? 'Sin lista',
+          status: campaign.status,
+          date: formatDateLocal(campaign.createdAt),
+          scheduledAt: campaign.scheduledAt,
+          engagement: 0,
+        }))
+      )
+    } catch (err) {
+      setCampaignsError(
+        err instanceof Error ? err.message : 'No se pudieron cargar las campañas.'
+      )
+    } finally {
+      setLoadingCampaigns(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadCampaigns()
+  }, [])
+
+  const openCreateDialog = () => {
+    setNewCampaignName('')
+    setNewCampaignSubject('')
+    setCreateError(null)
+    setCreateOpen(true)
+  }
+
+  const handleCreateCampaign = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    const name = newCampaignName.trim()
+    if (!name) {
+      setCreateError('El nombre de la campaña es obligatorio.')
+      return
+    }
+
+    setCreating(true)
+    setCreateError(null)
+
+    try {
+      const campaign = await api.createCampaign({
+        name,
+        subject: newCampaignSubject.trim() || undefined,
+      })
+      setCreateOpen(false)
+      router.push(`/builder?campaignId=${campaign.id}`)
+    } catch (err) {
+      setCreateError(
+        err instanceof Error ? err.message : 'No se pudo crear la campaña.'
+      )
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleCancelSchedule = async (campaignId: string) => {
+    if (!window.confirm('¿Cancelar la programación de esta campaña?')) return
+
+    setCancelingId(campaignId)
+    setActionError(null)
+
+    try {
+      const { campaign } = await api.cancelCampaignSchedule(campaignId)
+      setRows((current) =>
+        current.map((row) =>
+          row.id === campaignId
+            ? {
+                ...row,
+                status: campaign.status,
+                scheduledAt: null,
+                date: '—',
+              }
+            : row
+        )
+      )
+      router.refresh()
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : 'No se pudo cancelar la programación.'
+      )
+    } finally {
+      setCancelingId(null)
+    }
+  }
 
   return (
     <div className="w-full min-h-screen bg-surface font-body text-typography">
@@ -120,13 +240,14 @@ export function MainDashboard({
               <CreditCard size={18} />
               Facturación
             </Link>
-            <Link
-              href="/builder"
+            <button
+              type="button"
+              onClick={openCreateDialog}
               className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-kura-md hover:bg-primary-hover transition-colors font-medium shadow-kura-soft"
             >
               <Plus size={18} />
               Crear nueva campaña
-            </Link>
+            </button>
           </div>
         </header>
 
@@ -210,17 +331,33 @@ export function MainDashboard({
         {/* Nivel 3: Campañas Recientes */}
         <div className="bg-surface-card rounded-kura-lg shadow-kura-soft p-6">
           <h3 className="font-heading text-lg font-medium mb-4">Campañas Recientes</h3>
-          {campaigns.length === 0 ? (
+          {campaignsError && (
+            <div className="mb-4 rounded-kura-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              {campaignsError}
+            </div>
+          )}
+          {actionError && (
+            <div className="mb-4 rounded-kura-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              {actionError}
+            </div>
+          )}
+          {loadingCampaigns ? (
+            <div className="flex items-center justify-center gap-2 py-16 text-typography-muted">
+              <Loader2 size={18} className="animate-spin" />
+              Cargando campañas…
+            </div>
+          ) : rows.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-typography-muted mb-4">
-                Aún no has enviado ninguna campaña. ¡Rompe el hielo!
+                Aún no tienes campañas. ¡Crea la primera!
               </p>
-              <Link
-                href="/builder"
+              <button
+                type="button"
+                onClick={openCreateDialog}
                 className="inline-block border border-primary text-primary px-4 py-2 rounded-kura-md hover:bg-surface transition-colors"
               >
                 Empezar ahora
-              </Link>
+              </button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -236,7 +373,7 @@ export function MainDashboard({
                   </tr>
                 </thead>
                 <tbody>
-                  {campaigns.map((campaign) => (
+                  {rows.map((campaign) => (
                     <tr
                       key={campaign.id}
                       className="border-b border-gray-50 hover:bg-surface transition-colors"
@@ -245,15 +382,35 @@ export function MainDashboard({
                       <td className="py-4 pr-4 text-typography-muted text-sm">{campaign.listName}</td>
                       <td className="py-4 pr-4">
                         <StatusBadge status={campaign.status} />
+                        {campaign.status === 'scheduled' && campaign.scheduledAt && (
+                          <span className="mt-1 block text-[11px] text-typography-muted">
+                            {formatScheduledLocal(campaign.scheduledAt)}
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 pr-4 text-typography-muted text-sm whitespace-nowrap">
-                        {campaign.date}
+                        {campaign.status === 'scheduled' && campaign.scheduledAt
+                          ? formatScheduledLocal(campaign.scheduledAt)
+                          : campaign.date}
                       </td>
                       <td className="py-4 pr-4">
                         <EngagementBar value={campaign.engagement} />
                       </td>
                       <td className="py-4">
                         <div className="flex items-center justify-end gap-1">
+                          {campaign.status === 'scheduled' && (
+                            <ActionButton
+                              title="Cancelar programación"
+                              onClick={() => handleCancelSchedule(campaign.id)}
+                              icon={
+                                cancelingId === campaign.id ? (
+                                  <Loader2 size={15} className="animate-spin" />
+                                ) : (
+                                  <CalendarX size={15} />
+                                )
+                              }
+                            />
+                          )}
                           <ActionButton
                             title="Editar campaña"
                             onClick={() => router.push(`/builder?campaignId=${campaign.id}`)}
@@ -274,6 +431,105 @@ export function MainDashboard({
           )}
         </div>
       </div>
+
+      {createOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+          <div
+            className="w-full max-w-md rounded-kura-lg bg-surface-card p-6 shadow-kura-soft"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-campaign-title"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-kura-sm bg-accent/30 text-primary">
+                  <Plus size={18} />
+                </span>
+                <div>
+                  <h2 id="create-campaign-title" className="font-heading text-lg font-semibold">
+                    Nueva campaña
+                  </h2>
+                  <p className="text-xs text-typography-muted">
+                    Crea un borrador y continúa en el editor.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCreateOpen(false)}
+                className="text-typography-muted hover:text-typography"
+                aria-label="Cerrar"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCampaign} className="mt-5 flex flex-col gap-4">
+              <div>
+                <label
+                  htmlFor="campaign-name"
+                  className="mb-1.5 block text-sm font-medium text-typography"
+                >
+                  Nombre de la campaña
+                </label>
+                <input
+                  id="campaign-name"
+                  type="text"
+                  value={newCampaignName}
+                  onChange={(event) => setNewCampaignName(event.target.value)}
+                  placeholder="Ej. Newsletter de noviembre"
+                  maxLength={255}
+                  autoFocus
+                  className="w-full rounded-kura-md border border-gray-200 bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="campaign-subject"
+                  className="mb-1.5 block text-sm font-medium text-typography"
+                >
+                  Asunto <span className="text-typography-muted">(opcional)</span>
+                </label>
+                <input
+                  id="campaign-subject"
+                  type="text"
+                  value={newCampaignSubject}
+                  onChange={(event) => setNewCampaignSubject(event.target.value)}
+                  placeholder="Ej. Novedades de este mes"
+                  maxLength={255}
+                  className="w-full rounded-kura-md border border-gray-200 bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                />
+              </div>
+
+              {createError && (
+                <div className="rounded-kura-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {createError}
+                </div>
+              )}
+
+              <div className="mt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(false)}
+                  disabled={creating}
+                  className="rounded-kura-md border border-gray-200 px-4 py-2 text-sm font-medium hover:border-primary hover:text-primary disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating || !newCampaignName.trim()}
+                  className="flex items-center gap-2 rounded-kura-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {creating ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                  Crear y editar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -359,6 +615,8 @@ const STATUS_STYLES: Record<CampaignStatus, { label: string; className: string }
   sending: { label: 'Enviando', className: 'bg-amber-50 text-amber-700' },
   sent: { label: 'Enviada', className: 'bg-accent/40 text-primary' },
   paused_trial_expired: { label: 'Pausada (Trial)', className: 'bg-red-50 text-red-600' },
+  failed: { label: 'Fallida', className: 'bg-red-50 text-red-600' },
+  canceled: { label: 'Cancelada', className: 'bg-gray-100 text-gray-600' },
 }
 
 function StatusBadge({ status }: { status: CampaignStatus }) {

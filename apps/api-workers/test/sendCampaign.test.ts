@@ -9,6 +9,7 @@ import { handleSendCampaign } from '../src/handlers/sendCampaign';
 import {
   campaigns,
   contacts,
+  lists,
   plans,
   subscriptions,
   usageCounters,
@@ -47,6 +48,11 @@ function createMockDb(data: MockData) {
       let table: unknown;
       const resolveRows = (): Promise<unknown[]> => {
         if (table === campaigns) return Promise.resolve(data.campaign ? [data.campaign] : []);
+        if (table === lists) {
+          return Promise.resolve(
+            data.campaign?.listId ? [{ id: data.campaign.listId }] : []
+          );
+        }
         if (table === users) return Promise.resolve(data.user ? [data.user] : []);
         if (table === subscriptions) {
           return Promise.resolve(data.subscription ? [data.subscription] : []);

@@ -4,6 +4,36 @@
  */
 
 /* -------------------------------------------------------------------------- */
+/* Campañas y envíos programados                                              */
+/* -------------------------------------------------------------------------- */
+
+export type CampaignStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'preparing'
+  | 'sending'
+  | 'sent'
+  | 'paused_trial_expired'
+  | 'failed'
+  | 'canceled';
+
+export interface CampaignScheduleRequest {
+  /** Fecha ISO 8601 en UTC (mínimo 2 minutos en el futuro). */
+  scheduled_at: string;
+}
+
+export interface CampaignScheduleResponse {
+  campaign: {
+    id: string;
+    userId: string;
+    status: CampaignStatus;
+    scheduledAt: string | null;
+    updatedAt: string | null;
+    lastError: string | null;
+  };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Trial / Paywall                                                             */
 /* -------------------------------------------------------------------------- */
 

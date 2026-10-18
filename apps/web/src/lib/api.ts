@@ -1,4 +1,6 @@
 import type {
+  CampaignScheduleResponse,
+  CampaignStatus,
   ContactsImportResult,
   ContactsListResponse,
   EasyEmailAST,
@@ -35,7 +37,11 @@ export interface Campaign {
   subject: string | null
   designJson: EasyEmailAST | null
   htmlContent: string | null
-  status: string
+  status: CampaignStatus
+  scheduledAt: string | null
+  lastError: string | null
+  createdAt: string
+  listName?: string | null
 }
 
 /** Obtiene el access token de la sesión de Supabase (solo en el navegador). */
@@ -132,6 +138,19 @@ export const api = {
     return campaign
   },
 
+  createCampaign: async (input: { name: string; subject?: string }): Promise<Campaign> => {
+    const { campaign } = await request<{ campaign: Campaign }>('/api/campaigns', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+    return campaign
+  },
+
+  listCampaigns: async (): Promise<Campaign[]> => {
+    const { campaigns } = await request<{ campaigns: Campaign[] }>('/api/campaigns')
+    return campaigns
+  },
+
   uploadAsset,
 
   getMe: () => request<MeResponse>('/api/me'),
@@ -166,6 +185,17 @@ export const api = {
 
   sendCampaign: (campaignId: string) =>
     request<{ message: string; enqueued: number }>(`/api/campaigns/${campaignId}/send`, {
+      method: 'POST',
+    }),
+
+  scheduleCampaign: (campaignId: string, scheduledAt: string) =>
+    request<CampaignScheduleResponse>(`/api/campaigns/${campaignId}/schedule`, {
+      method: 'POST',
+      body: JSON.stringify({ scheduled_at: scheduledAt }),
+    }),
+
+  cancelCampaignSchedule: (campaignId: string) =>
+    request<CampaignScheduleResponse>(`/api/campaigns/${campaignId}/cancel-schedule`, {
       method: 'POST',
     }),
 
