@@ -5,6 +5,7 @@ import {
   handleCreatePortal,
   handleGetMe,
 } from './handlers/billing';
+import { handleImportContacts, handleListContacts } from './handlers/contacts';
 import { handleGetCampaign } from './handlers/getCampaign';
 import { handleSendCampaign } from './handlers/sendCampaign';
 import { handleAutosave, handleCompile, handleSaveDesign } from './handlers/saveDesign';
@@ -142,6 +143,15 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
 
     if (request.method === 'GET' && url.pathname === '/api/me') {
       return handleGetMe(request, env, userId);
+    }
+
+    // Contactos: importación CSV y listado paginado (§7.2, §12.2).
+    if (request.method === 'POST' && url.pathname === '/api/contacts/import') {
+      return handleImportContacts(request, env, userId);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/contacts') {
+      return handleListContacts(request, env, userId);
     }
 
     // Subida de imágenes del editor a R2 (§12.5).

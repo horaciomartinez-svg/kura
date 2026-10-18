@@ -62,6 +62,36 @@ export interface MeResponse {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Contactos e importación CSV                                                */
+/* -------------------------------------------------------------------------- */
+
+export type ContactStatus = 'active' | 'bounced' | 'unsubscribed' | 'complained';
+
+export interface Contact {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  status: ContactStatus;
+  createdAt: string;
+}
+
+export interface ContactsListResponse {
+  contacts: Contact[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface ContactsImportResult {
+  imported: number;
+  duplicates: number;
+  invalid: number;
+  suppressed: number;
+  total_rows: number;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Verificación de dominio                                                    */
 /* -------------------------------------------------------------------------- */
 

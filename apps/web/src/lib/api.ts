@@ -1,4 +1,10 @@
-import type { EasyEmailAST, MeResponse, PlanCode } from '@kura/core'
+import type {
+  ContactsImportResult,
+  ContactsListResponse,
+  EasyEmailAST,
+  MeResponse,
+  PlanCode,
+} from '@kura/core'
 import { createClient } from '@/lib/supabase/client'
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787').replace(/\/$/, '')
@@ -139,6 +145,23 @@ export const api = {
   createPortal: () =>
     request<{ url: string }>('/api/billing/portal', {
       method: 'GET',
+    }),
+
+  listContacts: (params: { page?: number; limit?: number; search?: string }) => {
+    const searchParams = new URLSearchParams()
+    if (params.page) searchParams.set('page', String(params.page))
+    if (params.limit) searchParams.set('limit', String(params.limit))
+    if (params.search?.trim()) searchParams.set('search', params.search.trim())
+
+    const query = searchParams.toString()
+    return request<ContactsListResponse>(`/api/contacts${query ? `?${query}` : ''}`)
+  },
+
+  importContactsCsv: (csv: string) =>
+    request<ContactsImportResult>('/api/contacts/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/csv' },
+      body: csv,
     }),
 
   sendCampaign: (campaignId: string) =>

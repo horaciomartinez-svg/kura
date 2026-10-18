@@ -22,6 +22,7 @@ import {
   CreditCard,
   Plus,
   ShieldAlert,
+  Users,
 } from 'lucide-react'
 import type { TrialStatus } from '@kura/core'
 
@@ -104,7 +105,14 @@ export function MainDashboard({
               Aquí tienes el resumen de tu rendimiento en los últimos 30 días.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href="/contacts"
+              className="flex items-center gap-2 border border-primary text-primary px-4 py-3 rounded-kura-md hover:bg-surface-card transition-colors font-medium"
+            >
+              <Users size={18} />
+              Contactos
+            </Link>
             <Link
               href="/billing"
               className="flex items-center gap-2 border border-primary text-primary px-4 py-3 rounded-kura-md hover:bg-surface-card transition-colors font-medium"

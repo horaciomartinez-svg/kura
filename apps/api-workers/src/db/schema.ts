@@ -138,6 +138,7 @@ export const contacts = pgTable(
   },
   (table) => ({
     userEmailUnique: unique('contacts_user_id_email_unique').on(table.userId, table.email),
+    userCreatedIdx: index('idx_contacts_user_created_at').on(table.userId, table.createdAt),
   })
 );
 
